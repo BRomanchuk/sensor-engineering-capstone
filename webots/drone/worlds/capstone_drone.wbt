@@ -1,0 +1,137 @@
+#VRML_SIM R2025a utf8
+
+# Capstone starter world: DRONE (quadrotor).
+# A quadrotor flies a horizontal loop while changing altitude. You estimate its
+# full 3D pose (x, y, z, yaw). The extra sensor vs the ground robot is a
+# BAROMETER (altitude): smooth and cheap in z, where the GPS is noisiest.
+#
+# The drone is a Supervisor and is moved kinematically along the true path by its
+# controller (physics NULL). The controller synthesises the noisy sensors from
+# the known true state and scores the student's estimate against ground truth.
+#
+# Sensors exposed to the student (dict in capstone_drone.py):
+#   dt, gyro_z, speed (horizontal), baro (z, fast+smooth), gps (x,y,z noisy, 1Hz).
+#
+# Coordinate frame: x forward, y left, z up. Yaw = rotation about z.
+
+WorldInfo {
+  basicTimeStep 16
+}
+Viewpoint {
+  orientation -0.32 0.30 0.90 1.75
+  position 0 -20 16
+}
+Background {
+  skyColor [
+    0.45 0.62 0.9
+  ]
+}
+DirectionalLight {
+  direction 0.3 0.4 -1
+  intensity 2.6
+  castShadows TRUE
+}
+DEF GROUND Solid {
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.4 0.55 0.35
+        roughness 1
+        metalness 0
+      }
+      geometry DEF GROUND_PLANE Plane {
+        size 60 60
+      }
+    }
+  ]
+  boundingObject USE GROUND_PLANE
+}
+DEF PAD Solid {
+  translation 0 -6 0.02
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.9 0.85 0.1
+        roughness 1
+        metalness 0
+      }
+      geometry Cylinder {
+        height 0.04
+        radius 0.8
+      }
+    }
+  ]
+  name "landing_pad"
+}
+DEF DRONE Robot {
+  translation 0 -6 4
+  children [
+    DEF BODY Shape {
+      appearance PBRAppearance {
+        baseColor 0.15 0.15 0.18
+        roughness 1
+        metalness 0.3
+      }
+      geometry Box {
+        size 0.3 0.3 0.08
+      }
+    }
+    DEF ARM1 Pose {
+      translation 0.2 0.2 0.03
+      children [
+        DEF ROTOR Shape {
+          appearance PBRAppearance {
+            baseColor 0.6 0.6 0.65
+            roughness 1
+            metalness 0.5
+          }
+          geometry Cylinder {
+            height 0.02
+            radius 0.12
+          }
+        }
+      ]
+    }
+    DEF ARM2 Pose {
+      translation -0.2 0.2 0.03
+      children [
+        USE ROTOR
+      ]
+    }
+    DEF ARM3 Pose {
+      translation 0.2 -0.2 0.03
+      children [
+        USE ROTOR
+      ]
+    }
+    DEF ARM4 Pose {
+      translation -0.2 -0.2 0.03
+      children [
+        USE ROTOR
+      ]
+    }
+    GPS {
+      name "gps"
+    }
+    InertialUnit {
+      name "imu"
+    }
+    Gyro {
+      name "gyro"
+    }
+    Accelerometer {
+      name "accelerometer"
+    }
+    Camera {
+      translation 0.16 0 -0.02
+      rotation 0 1 0 1.0
+      name "camera"
+      width 320
+      height 240
+      fieldOfView 1.0
+    }
+  ]
+  name "drone"
+  controller "capstone_drone"
+  supervisor TRUE
+}
