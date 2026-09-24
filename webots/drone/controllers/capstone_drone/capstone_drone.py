@@ -87,7 +87,11 @@ def main():
     writer = csv.writer(log)
     writer.writerow(["t", "gt_x", "gt_y", "gt_z", "gt_yaw",
                      "est_x", "est_y", "est_z", "est_yaw",
-                     "gps_x", "gps_y", "gps_z", "vis_x", "vis_y", "vis_z", "vis_yaw", "baro"])
+                     "gps_x", "gps_y", "gps_z", 
+                     "vis_x", "vis_y", "vis_z", "vis_yaw", 
+                     "baro", "mag",
+                     "gps_nis", "baro_nis", "mag_nis", "vis_nis",
+                     "gps_fault", "baro_fault", "mag_fault", "vis_fault"])
 
     x, y = START
     psi = 0.0
@@ -151,9 +155,11 @@ def main():
                        z + random.gauss(0, config.GPS_NOISE_Z))
             
         mag = None
+        mag_yaw = None
         if since_mag >= config.MAG_PERIOD_S:
             since_mag = 0.0
-            mag = psi_to_mag(yaw + random.gauss(0, config.MAG_NOISE_STD))
+            mag_yaw = yaw + random.gauss(0, config.MAG_NOISE_STD)
+            mag = psi_to_mag(mag_yaw)
 
         camera = None
         if since_camera >= config.CAMERA_PERIOD_S:
@@ -198,18 +204,29 @@ def main():
             "mag": mag  # heading (rad), smooth + frequent, low noise
         }
 
-        est_x, est_y, est_z, est_yaw = estimator.estimate(sensors)
+        est_x, est_y, est_z, est_yaw, health = estimator.estimate(sensors)
 
         # --- score against ground truth (3D) ---------------------------------
-        writer.writerow([f"{t:.3f}", x, y, z, psi, est_x, est_y, est_z, est_yaw,
-                         "" if gps_xyz is None else gps_xyz[0],
-                         "" if gps_xyz is None else gps_xyz[1],
-                         "" if gps_xyz is None else gps_xyz[2],
-                         "" if camera is None else last_vis_px,
-                         "" if camera is None else last_vis_py,
-                         "" if camera is None else last_vis_pz,
-                         "" if camera is None else last_vis_heading,
-                         "" if baro is None else baro])
+        writer.writerow([
+            f"{t:.3f}", x, y, z, psi, est_x, est_y, est_z, est_yaw,
+            "" if gps_xyz is None else gps_xyz[0],
+            "" if gps_xyz is None else gps_xyz[1],
+            "" if gps_xyz is None else gps_xyz[2],
+            "" if camera is None else last_vis_px,
+            "" if camera is None else last_vis_py,
+            "" if camera is None else last_vis_pz,
+            "" if camera is None else last_vis_heading,
+            "" if baro is None else baro,
+            "" if mag_yaw is None else mag_yaw,
+            "" if health["gps"]["nis"] is None else health["gps"]["nis"],
+            "" if health["baro"]["nis"] is None else health["baro"]["nis"],
+            "" if health["mag"]["nis"] is None else health["mag"]["nis"],
+            "" if health["camera"]["nis"] is None else health["camera"]["nis"],
+            "" if health["gps"]["nis"] is None else health["gps"]["fault"],
+            "" if health["baro"]["nis"] is None else health["baro"]["fault"],
+            "" if health["mag"]["nis"] is None else health["mag"]["fault"],
+            "" if health["camera"]["nis"] is None else health["camera"]["fault"]
+        ])
 
         sq_err_sum += (est_x - x) ** 2 + (est_y - y) ** 2 + (est_z - z) ** 2
         n += 1

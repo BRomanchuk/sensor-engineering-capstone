@@ -53,7 +53,7 @@ class StudentEstimator:
             (acc_noise * dt)**2,
             (acc_noise * dt)**2,
             (gyro_noise**2 * dt)
-        ]) * 0.001
+        ]) * 1.1
 
         # initialize the multi-rate EKF with the initial state, covariance, and process noise
         self.ekf = MultiRateEKF(
@@ -73,19 +73,27 @@ class StudentEstimator:
         camera = sensors["camera"]
 
         # update state with available sensor readings
+        health = {
+            'gps': {"nis": None, "fault": False},
+            'baro': {"nis": None, "fault": False},
+            'mag': {"nis": None, "fault": False},
+            'camera': {"nis": None, "fault": False},
+        }
         if gps is not None:
-            self.ekf.update('gps', np.array(gps))
+            health['gps']['nis'], health['gps']['fault'] = self.ekf.update('gps', np.array(gps))
         if baro is not None:
-            self.ekf.update('baro', np.array([baro]))
+            health['baro']['nis'], health['baro']['fault']  = self.ekf.update('baro', np.array([baro]))
         if mag is not None:
-            self.ekf.update('mag', np.array(mag))
+            health['mag']['nis'], health['mag']['fault']  = self.ekf.update('mag', np.array(mag))
         if camera is not None:
-            self.ekf.update('camera', camera)
+            health['camera']['nis'], health['camera']['fault']  = self.ekf.update('camera', camera)
+
+        
         
         # extract position and heading from the EKF state
         self.x, self.y, self.z = self.ekf.position
         self.yaw = self.ekf.heading
-        return self.x, self.y, self.z, self.yaw
+        return self.x, self.y, self.z, self.yaw, health
 
 
 

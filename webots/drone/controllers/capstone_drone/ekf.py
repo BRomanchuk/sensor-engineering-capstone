@@ -1,6 +1,16 @@
 import numpy as np
 import config
 
+from scipy.stats import chi2
+
+NIS_THRESHOLDS = {
+   "gps": chi2.ppf(0.99, df=3),
+    "baro": chi2.ppf(0.99, df=1),
+    "camera": chi2.ppf(0.99, df=3),
+    "mag": chi2.ppf(0.99, df=1),
+}
+
+
 # Sensor noise std devs
 NOISE = {
     'acc':      config.ACC_NOISE_STD,    # m/s²
@@ -157,6 +167,7 @@ class MultiRateEKF:
         """
         mx, my, mz = mag_meas
         heading = np.arctan2(my, mx)
+        print("Magnetometer Heading (rad):", heading)
         return np.array([heading])  # return as array for consistency with z
     
     def _R_camera(self, R_nominal, prev_visual_z, scale_noise):
@@ -188,11 +199,22 @@ class MultiRateEKF:
         y = z - H @ self.x
         if sensor_name == 'mag':
             y = (y + np.pi) % (2 * np.pi) - np.pi
+            print("Magnetometer Innovation (rad):", y)
+
         S = H @ self.P @ H.T + R
+
+        nis = y.T @ np.linalg.inv(S) @ y
+        fault_detected = nis > NIS_THRESHOLDS[sensor_name]
+
+        if fault_detected:
+            # Apply fallback: increase R for this update
+            R_degraded = R * 10.0
+            S = H @ self.P @ H.T + R_degraded
+
         K = self.P @ H.T @ np.linalg.inv(S)
         self.x += K @ y
         self.P = (np.eye(len(self.x)) - K @ H) @ self.P
-        NIS = y.T @ np.linalg.inv(S) @ y
+        
 
         if sensor_name == 'camera':
             self.last_vis_px = z[0]
@@ -200,7 +222,7 @@ class MultiRateEKF:
             # self.last_vis_pz = z[2]
             self.last_vis_heading = z[2]
 
-        return NIS
+        return nis, fault_detected
 
     @property
     def position(self) -> np.ndarray:
