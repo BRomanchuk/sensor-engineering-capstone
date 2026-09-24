@@ -49,6 +49,7 @@ def main():
     gt, est = [], []          # (x,y,z)
     gps, gps_gt, gps_t = [], [], []
     vis, vis_t = [], []
+    baro, baro_t = [], []
     with open(CSV, newline="") as f:
         for row in csv.DictReader(f):
             t.append(float(row["t"]))
@@ -62,11 +63,15 @@ def main():
             if row["vis_x"] != "":
                 vis.append((float(row["vis_x"]), float(row["vis_y"]), float(row["vis_z"])))
                 vis_t.append(float(row["t"]))
+            if row["baro"] != "":
+                baro.append(float(row["baro"]))
+                baro_t.append(float(row["t"]))
 
     t = np.array(t)
     gt = np.array(gt); est = np.array(est)
     gps = np.array(gps); gps_gt = np.array(gps_gt); gps_t = np.array(gps_t)
     vis = np.array(vis); vis_t = np.array(vis_t)
+    baro = np.array(baro); baro_t = np.array(baro_t)
 
     ate = math.sqrt(np.mean(np.linalg.norm(est - gt, axis=1) ** 2))
     gps_ate = (math.sqrt(np.mean(np.linalg.norm(gps - gps_gt, axis=1) ** 2))
@@ -88,6 +93,8 @@ def main():
     axz.plot(t, est[:, 2], "b-", lw=1.4, label="Estimate z")
     if len(gps):
         axz.plot(gps_t, gps[:, 2], "r.", ms=4, alpha=0.5, label="GPS z")
+    if len(baro):
+        axz.plot(baro_t, baro, "g.", ms=4, alpha=0.5, label="Barometer z")
     axz.set_xlabel("t (s)"); axz.set_ylabel("z (m)")
     axz.set_title("Drone: altitude over time")
     axz.grid(True, alpha=0.3); axz.legend()

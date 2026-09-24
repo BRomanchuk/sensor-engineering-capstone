@@ -43,6 +43,7 @@ class StudentEstimator:
         gyro_noise = config.GYRO_NOISE_STD
         dt = 0.016
 
+        # initial state covariance and process noise covariance matrices
         P0 = np.diag([1e-5, 1e-5, 1e-5, 1e-1, 1e-1, 1e-1, 1e-5])
         Q = np.diag([
             (0.5 * acc_noise * dt**2)**2, 
@@ -54,10 +55,11 @@ class StudentEstimator:
             (gyro_noise**2 * dt)
         ]) * 0.001
 
+        # initialize the multi-rate EKF with the initial state, covariance, and process noise
         self.ekf = MultiRateEKF(
-            x0=[0.0, -6.0, 4, 0.0, 0.0, 0.0, -np.pi/2],  # Initial state: [x, y, z, vx, vy, vz, heading]
-            P0=P0,  # Initial covariance
-            Q=Q  # Process noise covariance
+            x0=[0.0, -6.0, 4, 0.0, 0.0, 0.0, +np.pi/2],
+            P0=P0,
+            Q=Q
         )
 
     def estimate(self, sensors):
