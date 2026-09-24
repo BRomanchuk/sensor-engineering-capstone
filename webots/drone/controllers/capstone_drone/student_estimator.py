@@ -30,6 +30,7 @@ import numpy as np
 
 from ekf import MultiRateEKF
 
+import config
 
 class StudentEstimator:
     def __init__(self):
@@ -37,32 +38,39 @@ class StudentEstimator:
         self.y = 0.0
         self.z = 0.0
         self.yaw = 0.0
-        P0 = 1e-3 * np.eye(7)
-        Q = 1e-4 * np.eye(7)
+
+        acc_noise = config.ACC_NOISE_STD
+        gyro_noise = config.GYRO_NOISE_STD
+        dt = 0.016
+
+        P0 = np.diag([1e-5, 1e-5, 1e-5, 1e-1, 1e-1, 1e-1, 1e-5])
+        Q = np.diag([
+            (0.5 * acc_noise * dt**2)**2, 
+            (0.5 * acc_noise * dt**2)**2, 
+            (0.5 * acc_noise * dt**2)**2,
+            (acc_noise * dt)**2,
+            (acc_noise * dt)**2,
+            (acc_noise * dt)**2,
+            (gyro_noise**2 * dt)
+        ]) * 0.001
+
         self.ekf = MultiRateEKF(
-            x0=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Initial state: [x, y, z, vx, vy, vz, yaw]
+            x0=[0.0, -6.0, 4, 0.0, 0.0, 0.0, -np.pi/2],  # Initial state: [x, y, z, vx, vy, vz, heading]
             P0=P0,  # Initial covariance
             Q=Q  # Process noise covariance
         )
 
     def estimate(self, sensors):
-        # ---- DEFAULT baseline: hold the last GPS fix (REPLACE THIS) ----------
-
-        if not self.ekf.initialized:
-            gps = sensors["gps"]
-            if gps is not None:
-                self.ekf.initialize_from_gps(np.array(gps))
-                self.x, self.y, self.z = self.ekf.position
-                self.yaw = self.ekf.heading
-                return self.x, self.y, self.z, self.yaw
-            
-
+        # predict state
         self.ekf.predict(sensors["imu"], sensors["dt"])
 
+        # get sensor readings
         gps = sensors["gps"]
         baro = sensors["baro"]
         mag = sensors["mag"]
         camera = sensors["camera"]
+
+        # update state with available sensor readings
         if gps is not None:
             self.ekf.update('gps', np.array(gps))
         if baro is not None:
@@ -72,6 +80,7 @@ class StudentEstimator:
         if camera is not None:
             self.ekf.update('camera', camera)
         
+        # extract position and heading from the EKF state
         self.x, self.y, self.z = self.ekf.position
         self.yaw = self.ekf.heading
         return self.x, self.y, self.z, self.yaw

@@ -48,6 +48,7 @@ def main():
     t = []
     gt, est = [], []          # (x,y,z)
     gps, gps_gt, gps_t = [], [], []
+    vis, vis_t = [], []
     with open(CSV, newline="") as f:
         for row in csv.DictReader(f):
             t.append(float(row["t"]))
@@ -58,10 +59,14 @@ def main():
                 gps.append((float(row["gps_x"]), float(row["gps_y"]), float(row["gps_z"])))
                 gps_gt.append(g)
                 gps_t.append(float(row["t"]))
+            if row["vis_x"] != "":
+                vis.append((float(row["vis_x"]), float(row["vis_y"]), float(row["vis_z"])))
+                vis_t.append(float(row["t"]))
 
     t = np.array(t)
     gt = np.array(gt); est = np.array(est)
     gps = np.array(gps); gps_gt = np.array(gps_gt); gps_t = np.array(gps_t)
+    vis = np.array(vis); vis_t = np.array(vis_t)
 
     ate = math.sqrt(np.mean(np.linalg.norm(est - gt, axis=1) ** 2))
     gps_ate = (math.sqrt(np.mean(np.linalg.norm(gps - gps_gt, axis=1) ** 2))
@@ -72,6 +77,8 @@ def main():
     axp.plot(est[:, 0], est[:, 1], "b-", lw=1.4, label=f"Estimate (3D ATE {ate:.3f} m)")
     if len(gps):
         axp.plot(gps[:, 0], gps[:, 1], "r.", ms=4, alpha=0.5, label="GPS fixes")
+    if len(vis):
+        axp.plot(vis[:, 0], vis[:, 1], "m.", ms=4, alpha=0.5, label="Camera fixes")
     axp.plot(gt[0, 0], gt[0, 1], "go", ms=9, label="start")
     axp.set_xlabel("x (m)"); axp.set_ylabel("y (m)")
     axp.set_title("Drone: horizontal path"); axp.axis("equal")

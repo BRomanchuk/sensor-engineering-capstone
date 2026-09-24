@@ -1,15 +1,17 @@
 import numpy as np
+import config
 
 # Sensor noise std devs
 NOISE = {
-    'acc':  0.0001,    # m/s²
-    'gyro':   0.01,  # rad/s
-    'gps':    1.20,    # m
-    'baro':   0.15,    # m
-    'mag':    0.01,    # rad
-    'camera_heading': 0.01,  # rad
-    'camera_shift': 0.02,  # m
-    'camera_scale': 0.1,  # m
+    'acc':      config.ACC_NOISE_STD,    # m/s²
+    'gyro':     config.GYRO_NOISE_STD,  # rad/s
+    'gps_xy':   config.GPS_NOISE_XY,    # m
+    'gps_z':    config.GPS_NOISE_Z,    # m
+    'baro':     config.BARO_NOISE_STD,    # m
+    'mag':      config.MAG_NOISE_STD,    # rad
+    'camera_heading':   config.CAMERA_ROT_STD,  # rad
+    'camera_shift':     config.CAMERA_SHIFT_STD,  # m
+    'camera_scale':     config.CAMERA_SCALE_STD,  # m
 }
 
 def build_sensor_matrices(noise: dict = NOISE) -> dict:
@@ -22,7 +24,7 @@ def build_sensor_matrices(noise: dict = NOISE) -> dict:
         [0, 1, 0, 0, 0, 0, 0],
         [0, 0, 1, 0, 0, 0, 0]
     ])
-    R_gps = np.eye(3) * noise['gps']**2
+    R_gps = np.diag([noise['gps_xy']**2, noise['gps_xy']**2, noise['gps_z']**2])
 
     H_baro = np.array([[0, 0, 1, 0, 0, 0, 0]])
     R_baro = np.array([[noise['baro']**2]])
@@ -33,14 +35,14 @@ def build_sensor_matrices(noise: dict = NOISE) -> dict:
     H_camera = np.array([
         [1, 0, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, 0, 0, 0],
+        # [0, 0, 1, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 1]
     ])
-    
+    position_noise = noise['camera_shift'] * (1 + noise['camera_scale'])
     R_camera = np.diag([
-        noise['camera_shift']**2,
-        noise['camera_shift']**2,
-        noise['camera_scale']**2,
+        position_noise**2,
+        position_noise**2,
+        # noise['camera_shift']**2,
         noise['camera_heading']**2
     ])
 
@@ -129,17 +131,19 @@ class MultiRateEKF:
         shift_body = T[:2, 2]
         d_heading = np.arctan2(T[1, 0], T[0, 0])
 
-        shift_world = np.array([
-            shift_body[0] * np.cos(self.last_vis_heading) - shift_body[1] * np.sin(self.last_vis_heading),
-            shift_body[0] * np.sin(self.last_vis_heading) + shift_body[1] * np.cos(self.last_vis_heading)
-        ]) / scale
+        heading = self.last_vis_heading + d_heading
+
+        R_body_to_world = np.array([
+            [np.cos(heading), -np.sin(heading)],
+            [np.sin(heading),  np.cos(heading)]
+        ])
+        shift_world = R_body_to_world @ shift_body * scale
 
         x_vis = self.last_vis_px + shift_world[0]
         y_vis = self.last_vis_py + shift_world[1]
-        z_vis = self.last_vis_pz / scale
-        heading = self.last_vis_heading + d_heading
+        # z_vis = self.last_vis_pz / scale
 
-        return np.array([x_vis, y_vis, z_vis, heading])
+        return np.array([x_vis, y_vis, heading])
 
     def _mag_to_heading(self, mag_meas: np.ndarray) -> float:
         """
@@ -154,6 +158,11 @@ class MultiRateEKF:
         mx, my, mz = mag_meas
         heading = np.arctan2(my, mx)
         return np.array([heading])  # return as array for consistency with z
+    
+    def _R_camera(self, R_nominal, prev_visual_z, scale_noise):
+        abs_z_noise = np.abs(prev_visual_z) * scale_noise
+        R_nominal[2, 2] = abs_z_noise ** 2
+        return R_nominal
 
     def update(self, sensor_name: str, z: np.ndarray) -> float:
         """
@@ -172,6 +181,10 @@ class MultiRateEKF:
             z = self._parse_transform_matrix(z)
         H = self.sensor_matrices[sensor_name]['H']
         R = self.sensor_matrices[sensor_name]['R']
+        # if sensor_name == 'camera':
+        #     # transform scale noise into absolute z noise based on last visual z
+        #     R = self._R_camera(R, self.last_vis_pz, NOISE['camera_scale'])
+
         y = z - H @ self.x
         if sensor_name == 'mag':
             y = (y + np.pi) % (2 * np.pi) - np.pi
@@ -182,10 +195,10 @@ class MultiRateEKF:
         NIS = y.T @ np.linalg.inv(S) @ y
 
         if sensor_name == 'camera':
-            self.last_vis_px = self.x[0]
-            self.last_vis_py = self.x[1]
-            self.last_vis_pz = self.x[2]
-            self.last_vis_heading = self.x[6]
+            self.last_vis_px = z[0]
+            self.last_vis_py = z[1]
+            # self.last_vis_pz = z[2]
+            self.last_vis_heading = z[2]
 
         return NIS
 

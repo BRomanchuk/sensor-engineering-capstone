@@ -27,6 +27,7 @@ import numpy as np
 from controller import Supervisor
 
 from student_estimator import StudentEstimator
+import config
 
 # ---------------------------------------------------------------- configuration
 RUN_SECONDS = 60.0
@@ -37,24 +38,6 @@ ALT_AMP = 1.5            # altitude swing (m)
 ALT_W = 0.20            # altitude angular frequency (rad/s)
 START = (0.0, -6.0)
 
-GPS_PERIOD_S = 1.0
-GPS_NOISE_XY = 0.40      # metres, horizontal GPS noise
-GPS_NOISE_Z = 1.20      # metres, VERTICAL GPS noise (much worse -- realistic)
-
-BARO_NOISE_STD = 0.15   # metres, barometer/altimeter noise (smooth, frequent)
-BARO_PERIOD_S = 0.1           # seconds, barometer update period (smooth, frequent)
-
-GYRO_BIAS = 0.000
-GYRO_NOISE_STD = 0.01
-SPEED_NOISE_STD = 0.03
-
-CAMERA_SHIFT_STD = 0.02  # metres, camera pixel shift noise (smooth, frequent)
-CAMERA_ROT_STD = 0.01      # radians, camera rotation noise (smooth, frequent)
-CAMERA_SCALE_STD = 0.0001
-CAMERA_PERIOD_S = 0.1           # seconds, camera update period (smooth, frequent)
-
-MAG_NOISE_STD = 0.01      # radians, magnetometer noise (smooth, frequent)
-MAG_PERIOD_S = 0.5             # seconds, magnetometer update period (smooth, frequent)
 
 RESULTS_DIR = "results"
 
@@ -71,6 +54,21 @@ def psi_to_mag(psi: float) -> np.ndarray:
     my = math.sin(psi)
     mz = 0.0
     return np.array([mx, my, mz])
+
+def rotate_vector(v: np.ndarray, angle: float) -> np.ndarray:
+    """
+    Rotate a 2D vector by a given angle.
+
+    Args:
+        v: 2D vector (shape: (2,))
+        angle: rotation angle in radians
+
+    Returns:
+        Rotated 2D vector (shape: (2,))
+    """
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                  [np.sin(angle),  np.cos(angle)]])
+    return R @ v
 
 
 def main():
@@ -89,16 +87,16 @@ def main():
     writer = csv.writer(log)
     writer.writerow(["t", "gt_x", "gt_y", "gt_z", "gt_yaw",
                      "est_x", "est_y", "est_z", "est_yaw",
-                     "gps_x", "gps_y", "gps_z"])
+                     "gps_x", "gps_y", "gps_z", "vis_x", "vis_y", "vis_z", "vis_yaw"])
 
     x, y = START
     psi = 0.0
     t = 0.0
 
-    since_gps = GPS_PERIOD_S
-    since_baro = BARO_PERIOD_S
-    since_camera = CAMERA_PERIOD_S
-    since_mag = MAG_PERIOD_S
+    since_gps = config.GPS_PERIOD_S
+    since_baro = config.BARO_PERIOD_S
+    since_camera = config.CAMERA_PERIOD_S
+    since_mag = config.MAG_PERIOD_S
 
     sq_err_sum = 0.0
     n = 0
@@ -106,7 +104,10 @@ def main():
     last_vis_px = x
     last_vis_py = y
     last_vis_pz = BASE_ALT
-    last_vis_heading = psi
+    last_vis_heading = psi - np.pi/2
+
+    vis_x = []
+    vis_y = []
 
     while robot.step(dt_ms) != -1:
         t += dt
@@ -121,65 +122,78 @@ def main():
         y += V_HORIZ * math.sin(psi) * dt
         z = BASE_ALT + ALT_AMP * math.sin(ALT_W * t)
 
-        vx = V_HORIZ * math.cos(psi)
-        vy = V_HORIZ * math.sin(psi)
-        vz = ALT_AMP * ALT_W * math.cos(ALT_W * t)
+        
+        vx = V_HORIZ * -math.sin(psi)
+        vy = V_HORIZ * math.cos(psi)
 
-        ax = -V_HORIZ * OMEGA * math.sin(psi)
-        ay = V_HORIZ * OMEGA * math.cos(psi)
-        az = -ALT_AMP * ALT_W * ALT_W * math.sin(ALT_W * t)
+        # calculate acc
+        ax = V_HORIZ * OMEGA * -math.cos(psi) + random.gauss(0, config.ACC_NOISE_STD)
+        ay = V_HORIZ * OMEGA * -math.sin(psi) + random.gauss(0, config.ACC_NOISE_STD)
+
+        az = -ALT_AMP * ALT_W * ALT_W * math.sin(ALT_W * t) + random.gauss(0, config.ACC_NOISE_STD)
+
+        ax, ay = rotate_vector(np.array([ax, ay]), -psi)
 
         trans.setSFVec3f([x, y, z])
         rot.setSFRotation([0, 0, 1, psi])
 
         # --- synthesise the sensors ------------------------------------------
-        gyro_z = OMEGA + GYRO_BIAS + random.gauss(0, GYRO_NOISE_STD)
-        speed = V_HORIZ + random.gauss(0, SPEED_NOISE_STD)          # horizontal
+        gyro_z = OMEGA + config.GYRO_BIAS + random.gauss(0, config.GYRO_NOISE_STD)
 
         baro = None
-        if since_baro >= BARO_PERIOD_S:
+        if since_baro >= config.BARO_PERIOD_S:
             since_baro = 0.0
-            baro = z + random.gauss(0, BARO_NOISE_STD)                  # smooth altitude, every tick
+            baro = z + random.gauss(0, config.BARO_NOISE_STD)                  # smooth altitude, every tick
 
         imu_meas = np.array([ax, ay, az + 9.81, 0.0, 0.0, gyro_z])  # ax, ay, az, gx, gy, gz
         gps_xyz = None
-        if since_gps >= GPS_PERIOD_S:
+        if since_gps >= config.GPS_PERIOD_S:
             since_gps = 0.0
-            gps_xyz = (x + random.gauss(0, GPS_NOISE_XY),
-                       y + random.gauss(0, GPS_NOISE_XY),
-                       z + random.gauss(0, GPS_NOISE_Z))
+            gps_xyz = (x + random.gauss(0, config.GPS_NOISE_XY),
+                       y + random.gauss(0, config.GPS_NOISE_XY),
+                       z + random.gauss(0, config.GPS_NOISE_Z))
             
         mag = None
-        # if since_mag >= MAG_PERIOD_S:
-        #     since_mag = 0.0
-        #     mag = psi_to_mag(psi + random.gauss(0, MAG_NOISE_STD))
+        if since_mag >= config.MAG_PERIOD_S:
+            since_mag = 0.0
+            mag = psi_to_mag(psi-np.pi/2 + random.gauss(0, config.MAG_NOISE_STD))
 
         camera = None
-        if since_camera >= CAMERA_PERIOD_S:
+        if since_camera >= config.CAMERA_PERIOD_S:
             since_camera = 0.0
             # --- camera sees the world from the drone's perspective -----------
             # 2D transformation matrix in drone frame:
-            scale = (last_vis_pz / z)
-            d_heading = (psi - last_vis_heading)
-            relative_shift_world = np.array([x - last_vis_px, y - last_vis_py])
-            relative_shift_body = np.array([
-                relative_shift_world[0] * np.cos(-last_vis_heading) - relative_shift_world[1] * np.sin(-last_vis_heading),
-                relative_shift_world[0] * np.sin(-last_vis_heading) + relative_shift_world[1] * np.cos(-last_vis_heading)
-            ]) * scale
+            scale = (last_vis_pz / z)# + random.gauss(0, config.CAMERA_SCALE_STD)
+            yaw = psi - np.pi/2
 
-            d_heading += random.gauss(0, CAMERA_ROT_STD)
-            scale += random.gauss(0, CAMERA_SCALE_STD)
-            R = np.array([[np.cos(d_heading), -np.sin(d_heading)],
-                            [np.sin(d_heading),  np.cos(d_heading)]])
+            # world to drone frame rotation matrix
+            R_world_to_drone = np.array([
+                [math.cos(-yaw), -math.sin(-yaw)],
+                [math.sin(-yaw),  math.cos(-yaw)]
+            ])
+
+            world_shift = np.array([x, y]) - np.array([last_vis_px, last_vis_py])
+
+            drone_shift = (R_world_to_drone @ world_shift )+ np.random.normal(0, config.CAMERA_SHIFT_STD, size=2)
+
+            drone_shift /= scale
+
+            d_heading = (yaw - last_vis_heading) + random.gauss(0, config.CAMERA_ROT_STD)
+
+            camera = np.zeros((2, 3))
+            R = np.array([[math.cos(d_heading), -math.sin(d_heading)],
+                            [math.sin(d_heading),  math.cos(d_heading)]])
+            camera[:2, :2] = R / scale
+            camera[:2, 2] = drone_shift #+ np.random.normal(0, config.CAMERA_SHIFT_STD, size=2)
             
-            camera = np.eye(2, 3)
-            camera[:2, :2] = R * scale
-            camera[0, 2] = relative_shift_body[0] + random.gauss(0, CAMERA_SHIFT_STD)
+            print("drone shift", drone_shift)
+            # return
+    
 
             last_vis_px = x
             last_vis_py = y
             last_vis_pz = z
-            last_vis_heading = psi
+            last_vis_heading = yaw
 
         sensors = {
             "t": t,
@@ -197,7 +211,11 @@ def main():
         writer.writerow([f"{t:.3f}", x, y, z, psi, est_x, est_y, est_z, est_yaw,
                          "" if gps_xyz is None else gps_xyz[0],
                          "" if gps_xyz is None else gps_xyz[1],
-                         "" if gps_xyz is None else gps_xyz[2]])
+                         "" if gps_xyz is None else gps_xyz[2],
+                         "" if camera is None else last_vis_px,
+                         "" if camera is None else last_vis_py,
+                         "" if camera is None else last_vis_pz,
+                         "" if camera is None else last_vis_heading])
         sq_err_sum += (est_x - x) ** 2 + (est_y - y) ** 2 + (est_z - z) ** 2
         n += 1
 
