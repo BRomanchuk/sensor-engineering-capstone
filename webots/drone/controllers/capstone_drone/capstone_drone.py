@@ -198,10 +198,10 @@ def main():
             "t": t,
             "dt": dt,
             "imu": imu_meas,     # yaw rate (rad/s), biased
-            "camera": camera,       # horizontal speed (m/s)
-            "baro": baro,         # altitude (m): smooth + frequent, low noise
-            "gps": gps_xyz,       # absolute (x, y, z) with noise, or None between updates
-            "mag": mag  # heading (rad), smooth + frequent, low noise
+            "camera": camera,    # camera 2D transform matrix (2x3)
+            "baro": baro,        # altitude (m): smooth + frequent, low noise
+            "gps": gps_xyz,      # absolute (x, y, z) with noise, or None between updates
+            "mag": mag  # heading vector, smooth + frequent, low noise
         }
 
         est_x, est_y, est_z, est_yaw, health = estimator.estimate(sensors)

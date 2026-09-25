@@ -3,6 +3,8 @@ import config
 
 from scipy.stats import chi2
 
+
+# NIS thresholds for fault detection
 NIS_THRESHOLDS = {
    "gps": chi2.ppf(0.99, df=3),
     "baro": chi2.ppf(0.99, df=1),
@@ -24,10 +26,17 @@ NOISE = {
     'camera_scale':     config.CAMERA_SCALE_STD,  # m
 }
 
+
 def build_sensor_matrices(noise: dict = NOISE) -> dict:
     """
     Build H and R matrices for each sensor.
-
+    
+    Args:
+        noise: Dictionary of sensor noise std devs.
+    
+    Returns:
+        Dictionary with keys 'gps', 'baro', 'mag', 'camera', each containing
+        a dict with keys 'H' and 'R'.
     """
     H_gps = np.array([
         [1, 0, 0, 0, 0, 0, 0],
@@ -63,8 +72,9 @@ def build_sensor_matrices(noise: dict = NOISE) -> dict:
         'camera': {'H': H_camera, 'R': R_camera}
     }
 
+
 class MultiRateEKF:
-    """Extended Kalman Filter with asynchronous multi-sensor updates."""
+    """Extended Kalman Filter with asynchronous multi-sensor updates and fault detection"""
 
     def __init__(self, x0: np.ndarray, P0: np.ndarray, Q: np.ndarray):
         """
@@ -85,15 +95,14 @@ class MultiRateEKF:
         self.last_vis_pz = x0[2]
         self.last_vis_heading = x0[6]
 
-    def initialize_from_gps(self, gps: np.ndarray) -> None:
-        """Initialize the filter state with the first GPS and barometer readings."""
-        self.x[:3] = gps
-        self.last_vis_px = self.x[0]
-        self.last_vis_py = self.x[1]
-        self.last_vis_pz = self.x[2]
-        self.initialized = True
-
     def predict(self, imu_meas: np.ndarray, dt: float) -> None:
+        """
+        Predict the next state and covariance based on IMU measurements.
+
+        Args:
+            imu_meas: IMU measurements [ax, ay, az, gx, gy, gz], shape (6,)
+            dt:       Time step in seconds
+        """
         x_pred = self._predict_state(imu_meas, dt)
         F = self._jacobian_F(imu_meas, dt)
         self.x = x_pred
@@ -116,6 +125,13 @@ class MultiRateEKF:
         return x_pred
     
     def _jacobian_F(self, imu_meas: np.ndarray, dt: float) -> np.ndarray:
+        """
+        Compute the Jacobian of the state transition function with respect to the state.
+
+        Args:
+            imu_meas: IMU measurements [ax, ay, az, gx, gy, gz], shape (6,)
+            dt:       Time step in seconds
+        """
         px, py, pz, vx, vy, vz, heading = self.x
         ax, ay, az, gx, gy, gz = imu_meas
         dvx_dheading = (-ax * np.sin(heading) - ay * np.cos(heading)) * dt
@@ -135,7 +151,10 @@ class MultiRateEKF:
         """
         Parse a 2x3 transformation matrix from camera to world frame.
 
-        output: x_vis, y_vis, z_vis, heading
+        Args:
+            T: 2x3 transformation matrix
+        Returns:
+            (x_vis, y_vis, heading): Estimated position and heading in world frame
         """
         scale = np.linalg.det(T[:2, :2]) ** 0.5
         shift_body = T[:2, 2]
@@ -171,6 +190,17 @@ class MultiRateEKF:
         return np.array([heading])  # return as array for consistency with z
     
     def _R_camera(self, R_nominal, prev_visual_z, scale_noise):
+        """
+        Adjust the camera measurement noise covariance based on the previous visual z and scale noise.
+
+        Args:
+            R_nominal: Nominal camera measurement noise covariance matrix
+            prev_visual_z: Previous visual z measurement
+            scale_noise: Scale noise standard deviation
+
+        Returns:
+            Adjusted camera measurement noise covariance matrix
+        """
         abs_z_noise = np.abs(prev_visual_z) * scale_noise
         R_nominal[2, 2] = abs_z_noise ** 2
         return R_nominal
@@ -180,22 +210,29 @@ class MultiRateEKF:
         Update step for a given sensor.
 
         Args:
-            sensor_name: 'gps', 'baro', or 'mag'
+            sensor_name: Name of the sensor ('gps', 'baro', 'mag', 'camera')
             z:           Measurement vector for the sensor
 
         Returns:
-            NIS (Normalized Innovation Squared)
+            nis (float): Normalized Innovation Squared
+            fault_detected (bool): True if fault detected, False otherwise
         """
+        # preprocess magnetometer and camera measurements
         if sensor_name == 'mag':
             z = self._mag_to_heading(z)
         if sensor_name == 'camera':
             z = self._parse_transform_matrix(z)
+        
+        # get sensor matrices
         H = self.sensor_matrices[sensor_name]['H']
         R = self.sensor_matrices[sensor_name]['R']
+
+        # adjust camera measurement noise based on last visual z and scale noise
         # if sensor_name == 'camera':
         #     # transform scale noise into absolute z noise based on last visual z
         #     R = self._R_camera(R, self.last_vis_pz, NOISE['camera_scale'])
 
+        # compute innovation and NIS, detect faults
         y = z - H @ self.x
         if sensor_name == 'mag':
             y = (y + np.pi) % (2 * np.pi) - np.pi
@@ -207,7 +244,7 @@ class MultiRateEKF:
         fault_detected = nis > NIS_THRESHOLDS[sensor_name]
 
         if fault_detected:
-            # Apply fallback: increase R for this update
+            # apply fallback: increase R for this update
             R_degraded = R * 10.0
             S = H @ self.P @ H.T + R_degraded
 
@@ -215,7 +252,7 @@ class MultiRateEKF:
         self.x += K @ y
         self.P = (np.eye(len(self.x)) - K @ H) @ self.P
         
-
+        # update last visual position and heading
         if sensor_name == 'camera':
             self.last_vis_px = z[0]
             self.last_vis_py = z[1]

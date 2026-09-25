@@ -167,24 +167,23 @@ def main():
     if len(vis_nis):
         axs[1][1].plot(vis_health_t, vis_nis, "m.", ms=4, alpha=0.5, label="Camera NIS")
     
-    axs[1][1].axhline(NIS_THRESHOLDS["gps"], color="r", ls="--", lw=1, alpha=0.5, label="GPS & Camera NIS threshold")
-    axs[1][1].axhline(NIS_THRESHOLDS["baro"], color="g", ls="--", lw=1, alpha=0.5, label="Barometer & Magnetometer NIS threshold")
+    axs[1][1].axhline(NIS_THRESHOLDS["gps"], color="r", ls="--", lw=1, alpha=0.9, label="GPS & Cam NIS thres.")
+    axs[1][1].axhline(NIS_THRESHOLDS["baro"], color="g", ls="--", lw=1, alpha=0.9, label="Baro & Mag NIS thres.")
     # detected faults
     if len(gps_fault) > 0:
-        axs[1][1].scatter(np.array(gps_health_t)[np.array(gps_fault)], 4*np.ones_like(gps_nis)[np.array(gps_fault)], color="r", s=40, marker="x", label="GPS fault")
+        axs[1][1].scatter(np.array(gps_health_t)[np.array(gps_fault)], 20*np.ones_like(gps_nis)[np.array(gps_fault)], color="r", s=40, marker="x", label="GPS fault")
     if len(baro_fault) > 0:
-        axs[1][1].scatter(np.array(baro_health_t)[np.array(baro_fault)], 3*np.ones_like(baro_nis)[np.array(baro_fault)], color="g", s=40, marker="x", label="Barometer fault")
+        axs[1][1].scatter(np.array(baro_health_t)[np.array(baro_fault)], 19*np.ones_like(baro_nis)[np.array(baro_fault)], color="g", s=40, marker="x", label="Barometer fault")
     if len(mag_fault) > 0:
-        axs[1][1].scatter(np.array(mag_health_t)[np.array(mag_fault)], 2*np.ones_like(mag_nis)[np.array(mag_fault)], color="b", s=40, marker="x", label="Magnetometer fault")
+        axs[1][1].scatter(np.array(mag_health_t)[np.array(mag_fault)], 18*np.ones_like(mag_nis)[np.array(mag_fault)], color="b", s=40, marker="x", label="Magnetometer fault")
     if len(vis_fault) > 0:
-        axs[1][1].scatter(np.array(vis_health_t)[np.array(vis_fault)], np.ones_like(vis_nis)[np.array(vis_fault)], color="m", s=40, marker="x", label="Camera fault")
-
+        axs[1][1].scatter(np.array(vis_health_t)[np.array(vis_fault)], 17*np.ones_like(vis_nis)[np.array(vis_fault)], color="m", s=40, marker="x", label="Camera fault")
     # limit y axis to show NIS values and thresholds clearly
     axs[1][1].set_ylim(0, 20)
-    
     axs[1][1].set_xlabel("t (s)"); axs[1][1].set_ylabel("NIS")
     axs[1][1].set_title("Drone: NIS over time")
-    axs[1][1].grid(True, alpha=0.3); axs[1][1].legend()
+    axs[1][1].grid(True, alpha=0.3); 
+    axs[1][1].legend(loc="upper left", fontsize=6)
 
     
 
