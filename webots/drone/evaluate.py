@@ -24,6 +24,9 @@ HERE = Path(__file__).resolve().parent
 
 from scipy.stats import chi2
 
+from controllers.capstone_drone.scenarios import USE_GPS, USE_BARO, USE_MAG, USE_CAMERA
+
+
 NIS_THRESHOLDS = {
    "gps": chi2.ppf(0.99, df=3),
     "baro": chi2.ppf(0.99, df=1),
@@ -188,9 +191,11 @@ def main():
     
 
     fig.tight_layout()
-    out = CSV.parent / "trajectory.png"
+    out = CSV.parent / f"trajectory{'-gps' if USE_GPS else ""}{'-baro' if USE_BARO else ""}{'-mag' if USE_MAG else ""}{'-vis' if USE_CAMERA else ""}.png"
     fig.savefig(out, dpi=130)
     print(f"3D ATE (position RMSE): {ate:.3f} m   (raw-GPS baseline ~ {gps_ate:.3f} m)")
+    print(f"Terminal Error (3D distance to goal): {np.linalg.norm(est[-1] - gt[-1]):.3f} m")
+    print(f"Total mission distance: {np.sum(np.linalg.norm(np.diff(gt, axis=0), axis=1)):.3f} m")
     print(f"Saved {out}")
 
 

@@ -1,5 +1,5 @@
 import numpy as np
-import config
+import sensors_config as sensors_config
 
 from scipy.stats import chi2
 
@@ -15,15 +15,15 @@ NIS_THRESHOLDS = {
 
 # Sensor noise std devs
 NOISE = {
-    'acc':      config.ACC_NOISE_STD,    # m/s²
-    'gyro':     config.GYRO_NOISE_STD,  # rad/s
-    'gps_xy':   config.GPS_NOISE_XY,    # m
-    'gps_z':    config.GPS_NOISE_Z,    # m
-    'baro':     config.BARO_NOISE_STD,    # m
-    'mag':      config.MAG_NOISE_STD,    # rad
-    'camera_heading':   config.CAMERA_ROT_STD,  # rad
-    'camera_shift':     config.CAMERA_SHIFT_STD,  # m
-    'camera_scale':     config.CAMERA_SCALE_STD,  # m
+    'acc':      sensors_config.ACC_NOISE_STD,    # m/s²
+    'gyro':     sensors_config.GYRO_NOISE_STD,  # rad/s
+    'gps_xy':   sensors_config.GPS_NOISE_XY,    # m
+    'gps_z':    sensors_config.GPS_NOISE_Z,    # m
+    'baro':     sensors_config.BARO_NOISE_STD,    # m
+    'mag':      sensors_config.MAG_NOISE_STD,    # rad
+    'camera_heading':   sensors_config.CAMERA_ROT_STD,  # rad
+    'camera_shift':     sensors_config.CAMERA_SHIFT_STD,  # m
+    'camera_scale':     sensors_config.CAMERA_SCALE_STD,  # m
 }
 
 

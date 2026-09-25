@@ -27,7 +27,7 @@ import numpy as np
 from controller import Supervisor
 
 from student_estimator import StudentEstimator
-import config
+import sensors_config
 
 # ---------------------------------------------------------------- configuration
 RUN_SECONDS = 60.0
@@ -97,10 +97,10 @@ def main():
     psi = 0.0
     t = 0.0
 
-    since_gps = config.GPS_PERIOD_S
-    since_baro = config.BARO_PERIOD_S
-    since_camera = config.CAMERA_PERIOD_S
-    since_mag = config.MAG_PERIOD_S
+    since_gps = sensors_config.GPS_PERIOD_S
+    since_baro = sensors_config.BARO_PERIOD_S
+    since_camera = sensors_config.CAMERA_PERIOD_S
+    since_mag = sensors_config.MAG_PERIOD_S
 
     sq_err_sum = 0.0
     n = 0
@@ -129,9 +129,9 @@ def main():
         z = BASE_ALT + ALT_AMP * math.sin(ALT_W * t)
 
         # calculate acc
-        ax = V_HORIZ * OMEGA * -math.sin(psi) + random.gauss(0, config.ACC_NOISE_STD)
-        ay = V_HORIZ * OMEGA * math.cos(psi) + random.gauss(0, config.ACC_NOISE_STD)
-        az = -ALT_AMP * ALT_W * ALT_W * math.sin(ALT_W * t) + random.gauss(0, config.ACC_NOISE_STD)
+        ax = V_HORIZ * OMEGA * -math.sin(psi) + random.gauss(0, sensors_config.ACC_NOISE_STD)
+        ay = V_HORIZ * OMEGA * math.cos(psi) + random.gauss(0, sensors_config.ACC_NOISE_STD)
+        az = -ALT_AMP * ALT_W * ALT_W * math.sin(ALT_W * t) + random.gauss(0, sensors_config.ACC_NOISE_STD)
 
         ax, ay = rotate_vector(np.array([ax, ay]), -yaw)
 
@@ -139,34 +139,34 @@ def main():
         rot.setSFRotation([0, 0, 1, psi])
 
         # --- synthesise the sensors ------------------------------------------
-        gyro_z = OMEGA + config.GYRO_BIAS + random.gauss(0, config.GYRO_NOISE_STD)
+        gyro_z = OMEGA + sensors_config.GYRO_BIAS + random.gauss(0, sensors_config.GYRO_NOISE_STD)
 
         baro = None
-        if since_baro >= config.BARO_PERIOD_S:
+        if since_baro >= sensors_config.BARO_PERIOD_S:
             since_baro = 0.0
-            baro = z + random.gauss(0, config.BARO_NOISE_STD)
+            baro = z + random.gauss(0, sensors_config.BARO_NOISE_STD)
 
         imu_meas = np.array([ax, ay, az + 9.81, 0.0, 0.0, gyro_z])  # ax, ay, az, gx, gy, gz
         gps_xyz = None
-        if since_gps >= config.GPS_PERIOD_S:
+        if since_gps >= sensors_config.GPS_PERIOD_S:
             since_gps = 0.0
-            gps_xyz = (x + random.gauss(0, config.GPS_NOISE_XY),
-                       y + random.gauss(0, config.GPS_NOISE_XY),
-                       z + random.gauss(0, config.GPS_NOISE_Z))
+            gps_xyz = (x + random.gauss(0, sensors_config.GPS_NOISE_XY),
+                       y + random.gauss(0, sensors_config.GPS_NOISE_XY),
+                       z + random.gauss(0, sensors_config.GPS_NOISE_Z))
             
         mag = None
         mag_yaw = None
-        if since_mag >= config.MAG_PERIOD_S:
+        if since_mag >= sensors_config.MAG_PERIOD_S:
             since_mag = 0.0
-            mag_yaw = yaw + random.gauss(0, config.MAG_NOISE_STD)
+            mag_yaw = yaw + random.gauss(0, sensors_config.MAG_NOISE_STD)
             mag = psi_to_mag(mag_yaw)
 
         camera = None
-        if since_camera >= config.CAMERA_PERIOD_S:
+        if since_camera >= sensors_config.CAMERA_PERIOD_S:
             since_camera = 0.0
             # --- camera sees the world from the drone's perspective -----------
             # 2D transformation matrix in drone frame:
-            scale = (last_vis_pz / z) + random.gauss(0, config.CAMERA_SCALE_STD)
+            scale = (last_vis_pz / z) + random.gauss(0, sensors_config.CAMERA_SCALE_STD)
 
             # world to drone frame rotation matrix
             R_world_to_drone = np.array([
@@ -176,12 +176,12 @@ def main():
 
             # compute the shift in world frame and then transform to drone frame
             world_shift = (np.array([x, y]) - np.array([last_vis_px, last_vis_py]))
-            world_shift += np.random.normal(0, config.CAMERA_SHIFT_STD, size=2)
+            world_shift += np.random.normal(0, sensors_config.CAMERA_SHIFT_STD, size=2)
 
             drone_shift = R_world_to_drone @ world_shift
             drone_shift /= scale
 
-            d_heading = (yaw - last_vis_heading) + random.gauss(0, config.CAMERA_ROT_STD)
+            d_heading = (yaw - last_vis_heading) + random.gauss(0, sensors_config.CAMERA_ROT_STD)
 
             camera = np.zeros((2, 3))
             R = np.array([[math.cos(d_heading), -math.sin(d_heading)],

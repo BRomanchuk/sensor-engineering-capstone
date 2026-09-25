@@ -30,7 +30,8 @@ import numpy as np
 
 from ekf import MultiRateEKF
 
-import config
+from scenarios import USE_GPS, USE_BARO, USE_MAG, USE_CAMERA
+import sensors_config
 
 class StudentEstimator:
     def __init__(self):
@@ -39,8 +40,8 @@ class StudentEstimator:
         self.z = 0.0
         self.yaw = 0.0
 
-        acc_noise = config.ACC_NOISE_STD
-        gyro_noise = config.GYRO_NOISE_STD
+        acc_noise = sensors_config.ACC_NOISE_STD
+        gyro_noise = sensors_config.GYRO_NOISE_STD
         dt = 0.016
 
         # initial state covariance and process noise covariance matrices
@@ -79,13 +80,13 @@ class StudentEstimator:
             'mag': {"nis": None, "fault": False},
             'camera': {"nis": None, "fault": False},
         }
-        if gps is not None:
+        if gps is not None and USE_GPS:
             health['gps']['nis'], health['gps']['fault'] = self.ekf.update('gps', np.array(gps))
-        if baro is not None:
+        if baro is not None and USE_BARO:
             health['baro']['nis'], health['baro']['fault']  = self.ekf.update('baro', np.array([baro]))
-        if mag is not None:
+        if mag is not None and USE_MAG:
             health['mag']['nis'], health['mag']['fault']  = self.ekf.update('mag', np.array(mag))
-        if camera is not None:
+        if camera is not None and USE_CAMERA:
             health['camera']['nis'], health['camera']['fault']  = self.ekf.update('camera', camera)
 
         
